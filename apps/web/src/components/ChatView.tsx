@@ -10084,6 +10084,53 @@ export default function ChatView(props: ChatViewProps) {
                     }
                   >
                     <ComposerSurface.Shell contextStrip={showComposerContextStrip}>
+                      <div className="min-h-0">
+                        <div
+                          data-terminal-open={terminalUiState.terminalOpen ? "true" : undefined}
+                          className="relative z-0"
+                        >
+                          {mountComposerContextStrip && (
+                            <div className="pointer-events-auto">
+                              <BranchToolbar
+                                forceNewWorktree={multipleModelSelections !== null}
+                                ref={branchToolbarRef}
+                                environmentId={activeThread.environmentId}
+                                threadId={activeThread.id}
+                                showGitControls={isGitRepo}
+                                {...(routeKind === "draft" && draftId ? { draftId } : {})}
+                                onEnvModeChange={onEnvModeChange}
+                                startFromOrigin={startFromOrigin}
+                                onStartFromOriginChange={onStartFromOriginChange}
+                                envMode={envMode}
+                                {...(canOverrideServerThreadEnvMode
+                                  ? {
+                                      activeThreadBranchOverride: activeThreadBranch,
+                                      onActiveThreadBranchOverrideChange:
+                                        setPendingServerThreadBranch,
+                                    }
+                                  : {})}
+                                envLocked={envLocked}
+                                onComposerFocusRequest={scheduleComposerFocus}
+                                {...(canCheckoutPullRequestIntoThread
+                                  ? { onCheckoutPullRequestRequest: openPullRequestDialog }
+                                  : {})}
+                                {...(hasMultipleEnvironments ? { onEnvironmentChange } : {})}
+                                autoEnvironmentLabel={autoEnvironmentLabel}
+                                onAutoEnvironment={
+                                  draftId &&
+                                  !envLocked &&
+                                  hasMultipleEnvironments &&
+                                  loadBalancingSettings.loadBalancingEnabled
+                                    ? onAutoEnvironment
+                                    : undefined
+                                }
+                                availableEnvironments={logicalProjectEnvironments}
+                                contextStripVisible={showComposerContextStrip}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
                       <ComposerSurface.Host>
                         <div ref={attachDraftHeroComposerAnchorRef} className="relative z-10">
                           <ChatComposer
@@ -10176,9 +10223,7 @@ export default function ChatView(props: ChatViewProps) {
                               supportsPullRequests ? activeProjectRepository : null
                             }
                             restingControlsHost={restingComposerControlsHost}
-                            restingControlsHaveLeadingContext={
-                              isGitRepo || showComposerEnvironmentIndicator
-                            }
+                            restingControlsHaveLeadingContext={false}
                             onRestingControlsVisibilityChange={setRestingComposerControlsVisible}
                             getTimelineScrollableNode={getTimelineScrollableNode}
                             isTimelineAtLogicalEnd={isTimelineAtLogicalEnd}
@@ -10222,54 +10267,11 @@ export default function ChatView(props: ChatViewProps) {
                           />
                         </div>
                       </ComposerSurface.Host>
-                      <div className="min-h-0">
-                        <div
-                          data-terminal-open={terminalUiState.terminalOpen ? "true" : undefined}
-                          className="relative z-0"
-                        >
-                          {mountComposerContextStrip && (
-                            <div className="pointer-events-auto">
-                              <BranchToolbar
-                                forceNewWorktree={multipleModelSelections !== null}
-                                ref={branchToolbarRef}
-                                environmentId={activeThread.environmentId}
-                                threadId={activeThread.id}
-                                showGitControls={isGitRepo}
-                                {...(routeKind === "draft" && draftId ? { draftId } : {})}
-                                onEnvModeChange={onEnvModeChange}
-                                startFromOrigin={startFromOrigin}
-                                onStartFromOriginChange={onStartFromOriginChange}
-                                envMode={envMode}
-                                {...(canOverrideServerThreadEnvMode
-                                  ? {
-                                      activeThreadBranchOverride: activeThreadBranch,
-                                      onActiveThreadBranchOverrideChange:
-                                        setPendingServerThreadBranch,
-                                    }
-                                  : {})}
-                                envLocked={envLocked}
-                                onComposerFocusRequest={scheduleComposerFocus}
-                                {...(canCheckoutPullRequestIntoThread
-                                  ? { onCheckoutPullRequestRequest: openPullRequestDialog }
-                                  : {})}
-                                {...(hasMultipleEnvironments ? { onEnvironmentChange } : {})}
-                                autoEnvironmentLabel={autoEnvironmentLabel}
-                                onAutoEnvironment={
-                                  draftId &&
-                                  !envLocked &&
-                                  hasMultipleEnvironments &&
-                                  loadBalancingSettings.loadBalancingEnabled
-                                    ? onAutoEnvironment
-                                    : undefined
-                                }
-                                availableEnvironments={logicalProjectEnvironments}
-                                composerControlsHostRef={setRestingComposerControlsHost}
-                                contextStripVisible={showComposerContextStrip}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                      <div
+                        ref={setRestingComposerControlsHost}
+                        data-chat-resting-composer-controls-host="true"
+                        className="flex w-full min-w-0 items-center justify-start overflow-x-clip overflow-y-visible pt-1.5"
+                      />
                     </ComposerSurface.Shell>
                     <div
                       aria-hidden
