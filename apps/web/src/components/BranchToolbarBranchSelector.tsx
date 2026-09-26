@@ -787,17 +787,6 @@ export function BranchToolbarBranchSelector({
         className={cn("flex min-w-0 items-center gap-1", className)}
         data-composer-context-control
       >
-        <ThreadPullRequestBadgeControl
-          render={<ComposerControl size="xs" />}
-          badge={prBadge}
-          number={prNumber}
-          url={prUrl}
-          status={displayedPrStatus}
-          onOpenStack={() => useRightPanelStore.getState().open(threadRef, "pull-requests")}
-          onOpenPullRequest={(event) => {
-            if (prUrl) openPrLink(event, prUrl);
-          }}
-        />
         {/* Context menu lives on the wrapper: the disabled Button has
             pointer-events-none, so the trigger itself never sees right-clicks
             while refs are loading or a branch action is pending. */}
@@ -827,9 +816,20 @@ export function BranchToolbarBranchSelector({
             <ChevronDownIcon className="size-3 shrink-0 opacity-50" />
           </ComboboxTrigger>
         </span>
+        <ThreadPullRequestBadgeControl
+          render={<ComposerControl size="xs" />}
+          badge={prBadge}
+          number={prNumber}
+          url={prUrl}
+          status={displayedPrStatus}
+          onOpenStack={() => useRightPanelStore.getState().open(threadRef, "pull-requests")}
+          onOpenPullRequest={(event) => {
+            if (prUrl) openPrLink(event, prUrl);
+          }}
+        />
       </div>
       <ComboboxPopup
-        align="end"
+        align="start"
         side="top"
         className="flex w-80 flex-col"
         {...composerFloatingLayerProps}
