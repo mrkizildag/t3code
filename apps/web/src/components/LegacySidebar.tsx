@@ -1,5 +1,9 @@
 import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
-import { resolveThreadCurrentPullRequestLink } from "@t3tools/shared/threadPullRequests";
+import {
+  resolveThreadCurrentPullRequestLink,
+  resolveThreadPullRequestBadge,
+} from "@t3tools/shared/threadPullRequests";
+import { useRightPanelStore } from "../rightPanelStore";
 import { Spinner } from "~/components/ui/spinner";
 import {
   ArchiveIcon,
@@ -18,6 +22,7 @@ import {
   PrStatusTooltipContent,
   terminalStatusFromRunningIds,
   synchronizeTerminalPulse,
+  threadPullRequestBadgeOpensList,
   ThreadStatusLabel,
   ThreadWorktreeIndicator,
   useLinkedThreadPullRequest,
@@ -484,6 +489,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   const currentLinkedPr = supportsMultiplePullRequests
     ? resolveThreadCurrentPullRequestLink(thread.pullRequests)
     : null;
+  const prBadgeShape = supportsMultiplePullRequests
+    ? resolveThreadPullRequestBadge(thread.pullRequests)
+    : null;
   const prStatus = prStatusIndicator(pr, linkedPullRequestStatus?.sourceControlProvider);
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
   const isConfirmingArchive = confirmingArchiveThreadKey === threadKey && !isThreadRunning;
@@ -594,6 +602,13 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   );
   const handlePrClick = useCallback(
     (event: React.MouseEvent<HTMLAnchorElement>) => {
+      if (threadPullRequestBadgeOpensList(prBadgeShape)) {
+        event.preventDefault();
+        event.stopPropagation();
+        useRightPanelStore.getState().open(threadRef, "pull-requests");
+        if (!isActive) navigateToThread(threadRef);
+        return;
+      }
       const url = prStatus?.url ?? currentLinkedPr?.url;
       if (!url) return;
       const openedInRightPanel = openPrLink(
@@ -613,6 +628,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       prStatus,
       currentLinkedPr,
       threadRef,
+      prBadgeShape,
     ],
   );
   const handleRenameInputRef = useCallback(
