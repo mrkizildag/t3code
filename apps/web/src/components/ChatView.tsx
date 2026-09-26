@@ -1679,6 +1679,9 @@ export default function ChatView(props: ChatViewProps) {
   );
   const [isWorkspaceFileDragActive, setIsWorkspaceFileDragActive] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  // The branch strip only shows while the timeline rests at its end.
+  const [timelineIsAtEnd, setTimelineIsAtEnd] = useState(true);
+  const [timelineUserScrolling, setTimelineUserScrolling] = useState(false);
   const [expandedImage, setExpandedImage] = useState<ExpandedImagePreview | null>(null);
   useEffect(() => {
     const item = expandedImage?.images[expandedImage.index];
@@ -3764,6 +3767,7 @@ export default function ChatView(props: ChatViewProps) {
     showEnvironmentIndicator: showComposerEnvironmentIndicator,
     hostsRestingComposerControls: routeKind === "server",
   });
+  const branchStripAtRest = timelineIsAtEnd && !timelineUserScrolling;
   const showComposerContextStrip = shouldShowComposerContextStrip({
     hasActiveProject: activeProject !== null,
     isGitRepo,
@@ -5316,6 +5320,9 @@ export default function ChatView(props: ChatViewProps) {
   const showScrollDebouncer = useRef(
     new Debouncer(() => setShowScrollToBottom(true), { wait: 150 }),
   );
+  const timelineUserScrollSettleDebouncer = useRef(
+    new Debouncer(() => setTimelineUserScrolling(false), { wait: 100 }),
+  );
   const timelineScrollIntentRef = useRef<"toward-end" | "away-from-end" | null>(null);
   const timelineScrollModeRef = useRef<TimelineScrollMode>("following-end");
   // State mirror of the follow mode refs. LegendList's maintainScrollAtEnd
@@ -5469,6 +5476,11 @@ export default function ChatView(props: ChatViewProps) {
         const handleManualNavigation = () => {
           cancelTimelineLiveFollowForUserNavigationRef.current();
         };
+        // User gestures only: follow-mode scrolls while streaming must not hide the branch strip.
+        const markUserScrolling = () => {
+          setTimelineUserScrolling(true);
+          timelineUserScrollSettleDebouncer.current.maybeExecute();
+        };
         // The gestures below must only break follow when they can actually
         // move the viewport away from the live edge. Follow now gates
         // LegendList's maintainScrollAtEnd, so a spurious break while pinned
@@ -5487,6 +5499,10 @@ export default function ChatView(props: ChatViewProps) {
         const handleWheel = (event: WheelEvent) => {
           if (event.ctrlKey || !isTimelineScrollTarget(event.target, scrollNode, event.deltaY))
             return;
+          // Momentum wheel events keep arriving after the list hits its end; they move nothing.
+          if (contentScrollsUp() && (event.deltaY < 0 || !isTimelineAtLogicalEnd())) {
+            markUserScrolling();
+          }
           if (event.deltaY > 0) {
             timelineScrollIntentRef.current = "toward-end";
             if (isAtEndRef.current) {
@@ -5504,6 +5520,9 @@ export default function ChatView(props: ChatViewProps) {
         // actually carried the viewport out of the end band — an upward flick
         // gets there within its first few events and later touchmoves break.
         const handleTouchMove = () => {
+          if (contentScrollsUp()) {
+            markUserScrolling();
+          }
           if (viewportIsAwayFromEnd()) {
             handleManualNavigation();
           }
@@ -5553,6 +5572,9 @@ export default function ChatView(props: ChatViewProps) {
             !isTimelineScrollTarget(event.target, scrollNode, scrollDirection)
           )
             return;
+          if (contentScrollsUp() && (scrollDirection < 0 || !isTimelineAtLogicalEnd())) {
+            markUserScrolling();
+          }
           switch (event.key) {
             case "PageUp":
             case "Home":
@@ -5604,6 +5626,8 @@ export default function ChatView(props: ChatViewProps) {
         cancelAnimationFrame(frame);
       }
       removeListeners?.();
+      timelineUserScrollSettleDebouncer.current.cancel();
+      setTimelineUserScrolling(false);
     };
   }, [activeThread?.id, isTimelineAtLogicalEnd, timelineRealContentOverflowsViewport]);
 
@@ -5668,6 +5692,7 @@ export default function ChatView(props: ChatViewProps) {
     }
     if (isAtEndRef.current === isAtEnd) return;
     isAtEndRef.current = isAtEnd;
+    setTimelineIsAtEnd(isAtEnd);
     if (isAtEnd) {
       if (timelineScrollIntentRef.current === "toward-end") {
         composerRef.current?.restoreAfterTimelineReachedEnd();
@@ -10044,7 +10069,11 @@ export default function ChatView(props: ChatViewProps) {
               className={
                 isDraftHeroState
                   ? "pointer-events-none absolute inset-0 z-20 flex items-center"
-                  : "pointer-events-none absolute inset-x-0 bottom-0 z-20 pt-1.5 sm:pt-2"
+                  : cn(
+                      "pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-background",
+                      // Timeline text fades out above the composer instead of showing through its gaps.
+                      "before:absolute before:inset-x-0 before:bottom-full before:h-3 before:bg-linear-to-b before:from-transparent before:to-background",
+                    )
               }
             >
               <div
@@ -10084,53 +10113,6 @@ export default function ChatView(props: ChatViewProps) {
                     }
                   >
                     <ComposerSurface.Shell contextStrip={showComposerContextStrip}>
-                      <div className="min-h-0">
-                        <div
-                          data-terminal-open={terminalUiState.terminalOpen ? "true" : undefined}
-                          className="relative z-0"
-                        >
-                          {mountComposerContextStrip && (
-                            <div className="pointer-events-auto">
-                              <BranchToolbar
-                                forceNewWorktree={multipleModelSelections !== null}
-                                ref={branchToolbarRef}
-                                environmentId={activeThread.environmentId}
-                                threadId={activeThread.id}
-                                showGitControls={isGitRepo}
-                                {...(routeKind === "draft" && draftId ? { draftId } : {})}
-                                onEnvModeChange={onEnvModeChange}
-                                startFromOrigin={startFromOrigin}
-                                onStartFromOriginChange={onStartFromOriginChange}
-                                envMode={envMode}
-                                {...(canOverrideServerThreadEnvMode
-                                  ? {
-                                      activeThreadBranchOverride: activeThreadBranch,
-                                      onActiveThreadBranchOverrideChange:
-                                        setPendingServerThreadBranch,
-                                    }
-                                  : {})}
-                                envLocked={envLocked}
-                                onComposerFocusRequest={scheduleComposerFocus}
-                                {...(canCheckoutPullRequestIntoThread
-                                  ? { onCheckoutPullRequestRequest: openPullRequestDialog }
-                                  : {})}
-                                {...(hasMultipleEnvironments ? { onEnvironmentChange } : {})}
-                                autoEnvironmentLabel={autoEnvironmentLabel}
-                                onAutoEnvironment={
-                                  draftId &&
-                                  !envLocked &&
-                                  hasMultipleEnvironments &&
-                                  loadBalancingSettings.loadBalancingEnabled
-                                    ? onAutoEnvironment
-                                    : undefined
-                                }
-                                availableEnvironments={logicalProjectEnvironments}
-                                contextStripVisible={showComposerContextStrip}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
                       <ComposerSurface.Host>
                         <div ref={attachDraftHeroComposerAnchorRef} className="relative z-10">
                           <ChatComposer
@@ -10268,14 +10250,66 @@ export default function ChatView(props: ChatViewProps) {
                         </div>
                       </ComposerSurface.Host>
                       <div
-                        ref={setRestingComposerControlsHost}
-                        data-chat-resting-composer-controls-host="true"
-                        className="flex w-full min-w-0 items-center justify-start overflow-x-clip overflow-y-visible pt-1.5"
-                      />
+                        data-terminal-open={terminalUiState.terminalOpen ? "true" : undefined}
+                        className="relative z-0 flex w-full min-w-0 items-center gap-2 pt-1.5"
+                      >
+                        {mountComposerContextStrip && (
+                          <div
+                            aria-hidden={branchStripAtRest ? undefined : true}
+                            inert={branchStripAtRest ? undefined : true}
+                            className={cn(
+                              "pointer-events-auto min-w-0 shrink transition-opacity duration-100",
+                              !branchStripAtRest && "pointer-events-none opacity-0 transition-none",
+                            )}
+                          >
+                            <BranchToolbar
+                              forceNewWorktree={multipleModelSelections !== null}
+                              ref={branchToolbarRef}
+                              environmentId={activeThread.environmentId}
+                              threadId={activeThread.id}
+                              showGitControls={isGitRepo}
+                              {...(routeKind === "draft" && draftId ? { draftId } : {})}
+                              onEnvModeChange={onEnvModeChange}
+                              startFromOrigin={startFromOrigin}
+                              onStartFromOriginChange={onStartFromOriginChange}
+                              envMode={envMode}
+                              {...(canOverrideServerThreadEnvMode
+                                ? {
+                                    activeThreadBranchOverride: activeThreadBranch,
+                                    onActiveThreadBranchOverrideChange:
+                                      setPendingServerThreadBranch,
+                                  }
+                                : {})}
+                              envLocked={envLocked}
+                              onComposerFocusRequest={scheduleComposerFocus}
+                              {...(canCheckoutPullRequestIntoThread
+                                ? { onCheckoutPullRequestRequest: openPullRequestDialog }
+                                : {})}
+                              {...(hasMultipleEnvironments ? { onEnvironmentChange } : {})}
+                              autoEnvironmentLabel={autoEnvironmentLabel}
+                              onAutoEnvironment={
+                                draftId &&
+                                !envLocked &&
+                                hasMultipleEnvironments &&
+                                loadBalancingSettings.loadBalancingEnabled
+                                  ? onAutoEnvironment
+                                  : undefined
+                              }
+                              availableEnvironments={logicalProjectEnvironments}
+                              contextStripVisible={showComposerContextStrip}
+                            />
+                          </div>
+                        )}
+                        <div
+                          ref={setRestingComposerControlsHost}
+                          data-chat-resting-composer-controls-host="true"
+                          className="flex min-w-0 flex-1 items-center justify-start overflow-x-clip overflow-y-visible"
+                        />
+                      </div>
                     </ComposerSurface.Shell>
                     <div
                       aria-hidden
-                      className="h-[calc(env(safe-area-inset-bottom)+1rem)] sm:h-[calc(env(safe-area-inset-bottom)+1.25rem)]"
+                      className="h-[calc(env(safe-area-inset-bottom)+0.5rem)] sm:h-[calc(env(safe-area-inset-bottom)+0.625rem)]"
                     />
                   </div>
                 </div>

@@ -5010,6 +5010,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     </ComposerControl>
   ) : (
     <>
+      {composerControlsInStrip ? <div aria-hidden className="flex-1" /> : null}
       {composerControlsInStrip && restingControlsHaveLeadingContext ? (
         <ComposerControlSeparator
           size="xs"
@@ -5102,7 +5103,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       />
 
       <>
-        {composerControlsInStrip ? <div aria-hidden className="flex-1" /> : null}
         {restingBlockDefs.map((def, index) => {
           const hidden = index >= restingBlockDefs.length - restingHiddenBlockCount;
           return (
