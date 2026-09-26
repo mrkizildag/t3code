@@ -1496,7 +1496,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   const prBadgeShape = supportsMultiplePullRequests
     ? resolveThreadPullRequestBadge(thread.pullRequests)
     : null;
-  const handlePrStackClick = useCallback(() => {
+  const handleOpenPullRequests = useCallback(() => {
     useRightPanelStore.getState().open(threadRef, "pull-requests");
     if (!props.isActive) onThreadActivate(threadRef);
   }, [onThreadActivate, props.isActive, threadRef]);
@@ -1508,7 +1508,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
         number={pr?.number ?? currentLinkedPr?.number}
         url={pr?.url ?? currentLinkedPr?.url}
         status={prStatus}
-        onOpenStack={handlePrStackClick}
+        onOpenPullRequests={handleOpenPullRequests}
         onOpenPullRequest={handlePrClick}
       />
     ) : null;

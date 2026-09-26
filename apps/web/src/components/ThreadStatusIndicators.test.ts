@@ -2,11 +2,13 @@ import { ProjectId, type PullRequestSummary, type VcsStatusResult } from "@t3too
 import { describe, expect, it } from "@effect/vitest";
 import type { AnimationEvent } from "react";
 
+import { resolveThreadPullRequestBadge } from "@t3tools/shared/threadPullRequests";
 import {
   ChangeRequestStatusIcon,
   prStatusIndicator,
   resolveThreadPullRequestBadgePresentation,
   synchronizeTerminalPulse,
+  threadPullRequestBadgeOpensList,
 } from "./ThreadStatusIndicators";
 import { newestPullRequestSummary } from "../state/pullRequests";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
@@ -257,5 +259,42 @@ describe("resolveThreadPullRequestBadgePresentation", () => {
 
   it("omits the control when neither a stack nor a linked identity can be shown", () => {
     expect(resolveThreadPullRequestBadgePresentation({ badge: null, status: null })).toBeNull();
+  });
+});
+
+describe("threadPullRequestBadgeOpensList", () => {
+  it("does not open the list without a badge", () => {
+    expect(threadPullRequestBadgeOpensList(null)).toBe(false);
+  });
+
+  it("does not open the list for a single linked pull request", () => {
+    expect(
+      threadPullRequestBadgeOpensList({ kind: "pull-request", others: 0, state: "open" }),
+    ).toBe(false);
+  });
+
+  it("opens the list for unrelated linked pull requests", () => {
+    expect(
+      threadPullRequestBadgeOpensList({ kind: "pull-request", others: 1, state: "open" }),
+    ).toBe(true);
+  });
+
+  it("opens the list for a stack", () => {
+    expect(threadPullRequestBadgeOpensList({ kind: "stack", layers: 2, state: "open" })).toBe(true);
+  });
+
+  it("treats a single visible link plus a dismissed stack link as one pull request", () => {
+    const link = (number: number, source: "manual" | "stack-dismissed" = "manual") => ({
+      host: "github.com",
+      repository: "pingdotgg/t3code",
+      number,
+      url: `https://github.com/pingdotgg/t3code/pull/${number}`,
+      source,
+      linkedAt: `2026-01-01T00:00:${String(number).padStart(2, "0")}.000Z`,
+      snapshot: null,
+      stack: null,
+    });
+    const badge = resolveThreadPullRequestBadge([link(1), link(2, "stack-dismissed")]);
+    expect(threadPullRequestBadgeOpensList(badge)).toBe(false);
   });
 });
