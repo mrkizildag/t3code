@@ -27,10 +27,25 @@ import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 
+/**
+ * The titlebar row above the sidebar content: full height in desktop windows, trimmed on macOS
+ * where it only has to clear the traffic lights, and absent in the browser and macOS fullscreen.
+ */
+export type SidebarTitlebar = "full" | "compact" | "none";
+
+const TITLEBAR_ROW_CLASS: Record<SidebarTitlebar, string> = {
+  full: "drag-region h-[var(--workspace-topbar-height)]",
+  // Clears the traffic lights placed by getWindowTitleBarOptions in
+  // apps/desktop/src/window/DesktopWindow.ts (radius 7, centered in the 52px topbar: y 19–33).
+  compact: "drag-region h-9",
+  // Nothing sits in this row on wide screens, so the sidebar content starts at the top.
+  none: "h-[var(--workspace-topbar-height)] md:hidden",
+};
+
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
-  isElectron,
+  titlebar,
 }: {
-  isElectron: boolean;
+  titlebar: SidebarTitlebar;
 }) {
   const stageLabel = useEnvironmentStageLabel();
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
@@ -40,12 +55,11 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
       : null;
 
   return (
-    // The titlebar row, not a padded SidebarHeader: it aligns to the window controls.
+    // The titlebar row, not a padded SidebarHeader: it makes room for the window controls.
     <div
       className={cn(
-        "@container/sidebar-header relative flex h-[var(--workspace-topbar-height)] shrink-0 flex-row items-center gap-2 px-3 md:px-0",
-        // In the browser nothing sits in this row on desktop, so the sidebar content starts at the top.
-        isElectron ? "drag-region" : "md:hidden",
+        "@container/sidebar-header relative flex shrink-0 flex-row items-center gap-2 px-3 md:px-0",
+        TITLEBAR_ROW_CLASS[titlebar],
       )}
     >
       <SidebarTrigger variant="ghost" className="relative top-auto z-10 translate-y-0 md:hidden" />

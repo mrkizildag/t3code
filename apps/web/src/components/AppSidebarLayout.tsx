@@ -34,7 +34,7 @@ import {
 import LegacyThreadSidebar from "./LegacySidebar";
 import ThreadSidebar from "./Sidebar";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
-import { SidebarChromeHeader } from "./sidebar/SidebarChrome";
+import { SidebarChromeHeader, type SidebarTitlebar } from "./sidebar/SidebarChrome";
 import { MainAppLocationTracker } from "./sidebar/mainAppLocation";
 import { useProjects } from "../state/entities";
 import {
@@ -238,10 +238,12 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       ? getWindowFullscreenState()
       : false;
   });
+  const sidebarTitlebar: SidebarTitlebar =
+    !isElectron || isWindowFullscreen ? "none" : isMacosDesktop ? "compact" : "full";
   const sidebarProviderStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
     "--panel-animation-duration": `${panelAnimationDurationMs}ms`,
-    ...(isMacosDesktop && !isWindowFullscreen
+    ...(sidebarTitlebar === "compact"
       ? { "--workspace-controls-left": MACOS_TRAFFIC_LIGHTS_LEFT_INSET }
       : {}),
   } as CSSProperties;
@@ -308,13 +310,13 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         >
           {isOnSettings ? (
             <>
-              <SidebarChromeHeader isElectron={isElectron} />
+              <SidebarChromeHeader titlebar={sidebarTitlebar} />
               <SettingsSidebarNav pathname={pathname} />
             </>
           ) : legacySidebarEnabled ? (
-            <LegacyThreadSidebar />
+            <LegacyThreadSidebar titlebar={sidebarTitlebar} />
           ) : (
-            <ThreadSidebar />
+            <ThreadSidebar titlebar={sidebarTitlebar} />
           )}
           <SidebarRail onDoubleClick={resetSidebarWidth} />
         </Sidebar>

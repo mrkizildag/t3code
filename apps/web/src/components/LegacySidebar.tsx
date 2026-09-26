@@ -195,7 +195,11 @@ import {
   ThreadStatusPill,
 } from "./Sidebar.logic";
 import { sortThreads } from "../lib/threadSort";
-import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
+import {
+  SidebarChromeFooter,
+  SidebarChromeHeader,
+  type SidebarTitlebar,
+} from "./sidebar/SidebarChrome";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useIsMobile } from "~/hooks/useMediaQuery";
 import { CommandDialogTrigger } from "./ui/command";
@@ -3124,7 +3128,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
   );
 });
 
-export default function LegacySidebar() {
+export default function LegacySidebar({ titlebar }: { titlebar: SidebarTitlebar }) {
   const projects = useProjects();
   const sidebarThreads = useThreadShells();
   const projectExpandedById = useUiStateStore((store) => store.projectExpandedById);
@@ -3766,7 +3770,7 @@ export default function LegacySidebar() {
       {prewarmedSidebarThreadRefs.map((threadRef) => (
         <SidebarThreadDetailPrewarmer key={scopedThreadKey(threadRef)} threadRef={threadRef} />
       ))}
-      <SidebarChromeHeader isElectron={isElectron} />
+      <SidebarChromeHeader titlebar={titlebar} />
 
       <SidebarProjectsContent
         showArm64IntelBuildWarning={showArm64IntelBuildWarning}
