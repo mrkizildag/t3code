@@ -1679,9 +1679,6 @@ export default function ChatView(props: ChatViewProps) {
   );
   const [isWorkspaceFileDragActive, setIsWorkspaceFileDragActive] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
-  // The branch strip only shows while the timeline rests at its end.
-  const [timelineIsAtEnd, setTimelineIsAtEnd] = useState(true);
-  const [timelineUserScrolling, setTimelineUserScrolling] = useState(false);
   const [expandedImage, setExpandedImage] = useState<ExpandedImagePreview | null>(null);
   useEffect(() => {
     const item = expandedImage?.images[expandedImage.index];
@@ -3767,7 +3764,6 @@ export default function ChatView(props: ChatViewProps) {
     showEnvironmentIndicator: showComposerEnvironmentIndicator,
     hostsRestingComposerControls: routeKind === "server",
   });
-  const branchStripAtRest = timelineIsAtEnd && !timelineUserScrolling;
   const showComposerContextStrip = shouldShowComposerContextStrip({
     hasActiveProject: activeProject !== null,
     isGitRepo,
@@ -5320,9 +5316,6 @@ export default function ChatView(props: ChatViewProps) {
   const showScrollDebouncer = useRef(
     new Debouncer(() => setShowScrollToBottom(true), { wait: 150 }),
   );
-  const timelineUserScrollSettleDebouncer = useRef(
-    new Debouncer(() => setTimelineUserScrolling(false), { wait: 100 }),
-  );
   const timelineScrollIntentRef = useRef<"toward-end" | "away-from-end" | null>(null);
   const timelineScrollModeRef = useRef<TimelineScrollMode>("following-end");
   // State mirror of the follow mode refs. LegendList's maintainScrollAtEnd
@@ -5476,11 +5469,6 @@ export default function ChatView(props: ChatViewProps) {
         const handleManualNavigation = () => {
           cancelTimelineLiveFollowForUserNavigationRef.current();
         };
-        // User gestures only: follow-mode scrolls while streaming must not hide the branch strip.
-        const markUserScrolling = () => {
-          setTimelineUserScrolling(true);
-          timelineUserScrollSettleDebouncer.current.maybeExecute();
-        };
         // The gestures below must only break follow when they can actually
         // move the viewport away from the live edge. Follow now gates
         // LegendList's maintainScrollAtEnd, so a spurious break while pinned
@@ -5499,10 +5487,6 @@ export default function ChatView(props: ChatViewProps) {
         const handleWheel = (event: WheelEvent) => {
           if (event.ctrlKey || !isTimelineScrollTarget(event.target, scrollNode, event.deltaY))
             return;
-          // Momentum wheel events keep arriving after the list hits its end; they move nothing.
-          if (contentScrollsUp() && (event.deltaY < 0 || !isTimelineAtLogicalEnd())) {
-            markUserScrolling();
-          }
           if (event.deltaY > 0) {
             timelineScrollIntentRef.current = "toward-end";
             if (isAtEndRef.current) {
@@ -5520,9 +5504,6 @@ export default function ChatView(props: ChatViewProps) {
         // actually carried the viewport out of the end band — an upward flick
         // gets there within its first few events and later touchmoves break.
         const handleTouchMove = () => {
-          if (contentScrollsUp()) {
-            markUserScrolling();
-          }
           if (viewportIsAwayFromEnd()) {
             handleManualNavigation();
           }
@@ -5572,9 +5553,6 @@ export default function ChatView(props: ChatViewProps) {
             !isTimelineScrollTarget(event.target, scrollNode, scrollDirection)
           )
             return;
-          if (contentScrollsUp() && (scrollDirection < 0 || !isTimelineAtLogicalEnd())) {
-            markUserScrolling();
-          }
           switch (event.key) {
             case "PageUp":
             case "Home":
@@ -5626,8 +5604,6 @@ export default function ChatView(props: ChatViewProps) {
         cancelAnimationFrame(frame);
       }
       removeListeners?.();
-      timelineUserScrollSettleDebouncer.current.cancel();
-      setTimelineUserScrolling(false);
     };
   }, [activeThread?.id, isTimelineAtLogicalEnd, timelineRealContentOverflowsViewport]);
 
@@ -5692,7 +5668,6 @@ export default function ChatView(props: ChatViewProps) {
     }
     if (isAtEndRef.current === isAtEnd) return;
     isAtEndRef.current = isAtEnd;
-    setTimelineIsAtEnd(isAtEnd);
     if (isAtEnd) {
       if (timelineScrollIntentRef.current === "toward-end") {
         composerRef.current?.restoreAfterTimelineReachedEnd();
@@ -10254,14 +10229,7 @@ export default function ChatView(props: ChatViewProps) {
                         className="relative z-0 flex w-full min-w-0 items-center gap-2 pt-1.5"
                       >
                         {mountComposerContextStrip && (
-                          <div
-                            aria-hidden={branchStripAtRest ? undefined : true}
-                            inert={branchStripAtRest ? undefined : true}
-                            className={cn(
-                              "pointer-events-auto min-w-0 shrink transition-opacity duration-100",
-                              !branchStripAtRest && "pointer-events-none opacity-0 transition-none",
-                            )}
-                          >
+                          <div className="pointer-events-auto min-w-0 flex-1">
                             <BranchToolbar
                               forceNewWorktree={multipleModelSelections !== null}
                               ref={branchToolbarRef}
@@ -10297,14 +10265,17 @@ export default function ChatView(props: ChatViewProps) {
                               }
                               availableEnvironments={logicalProjectEnvironments}
                               contextStripVisible={showComposerContextStrip}
+                              composerControlsHostRef={setRestingComposerControlsHost}
                             />
                           </div>
                         )}
-                        <div
-                          ref={setRestingComposerControlsHost}
-                          data-chat-resting-composer-controls-host="true"
-                          className="flex min-w-0 flex-1 items-center justify-start overflow-x-clip overflow-y-visible"
-                        />
+                        {!mountComposerContextStrip && (
+                          <div
+                            ref={setRestingComposerControlsHost}
+                            data-chat-resting-composer-controls-host="true"
+                            className="flex min-w-0 flex-1 items-center justify-start overflow-x-clip overflow-y-visible"
+                          />
+                        )}
                       </div>
                     </ComposerSurface.Shell>
                     <div
