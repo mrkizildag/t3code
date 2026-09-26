@@ -1679,19 +1679,15 @@ export default function ThreadTerminalDrawer({
                             <div
                               key={terminalId}
                               className={cn(
-                                "group/tab flex h-6 w-full items-center gap-0.5 rounded-md pr-2 pl-1.5 text-xs",
+                                "group/tab flex h-6 w-full items-center gap-0.5 rounded-md pr-1 pl-1.5 text-xs",
                                 isActive
                                   ? "bg-accent text-foreground"
                                   : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
                               )}
                             >
-                              <PanelTabCloseButton
-                                label={closeTerminalLabel}
-                                onClick={() => confirmCloseTerminal(terminalId)}
-                                tooltip={closeTerminalLabel}
-                              >
+                              <span className="flex size-4 shrink-0 items-center justify-center">
                                 <TerminalSquare className="size-3 shrink-0" />
-                              </PanelTabCloseButton>
+                              </span>
                               <button
                                 type="button"
                                 className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 text-left"
@@ -1699,6 +1695,11 @@ export default function ThreadTerminalDrawer({
                               >
                                 <span className="truncate">{terminalLabel}</span>
                               </button>
+                              <PanelTabCloseButton
+                                label={closeTerminalLabel}
+                                onClick={() => confirmCloseTerminal(terminalId)}
+                                tooltip={closeTerminalLabel}
+                              />
                             </div>
                           );
                         })}
