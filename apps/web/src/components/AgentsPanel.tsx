@@ -3,11 +3,12 @@
  * The chat carries one expandable row per spawn batch and links here.
  *
  * Visualization rules (from live-test feedback):
- * - Spawn order is stable. Activity and completion update rows in place.
+ * - Spawn order is stable. Activity updates rows in place; a settled workflow
+ *   or direct spawn (idle included) moves to the collapsed Completed section.
  * - Agent rows reserve three fixed lines for identity, activity, and metrics;
  *   changing data must never change their height.
- * - Workflow expansion is presentation state. A live run stays expanded when
- *   it settles; older collapsed runs can still be opened at run granularity.
+ * - Workflow expansion is presentation state; collapsed runs can still be
+ *   opened at run granularity.
  * - Static status dots, DOM-write elapsed timers, plain token counters.
  */
 import { useAtomValue } from "@effect/atom-react";
@@ -19,6 +20,7 @@ import type {
 import {
   formatSubagentModelLabel,
   formatSubagentTokenCount,
+  isActiveSubagentStatus,
 } from "@t3tools/client-runtime/state/subagentRuntime";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { Bot, Braces, Check, ChevronDown, ChevronRight, X } from "lucide-react";
@@ -192,13 +194,7 @@ function AgentRow({ agent }: { agent: RuntimeSubagent }) {
 }
 
 function workflowIsLive(group: AgentPanelWorkflowGroup): boolean {
-  const status = group.workflow.status;
-  return (
-    status !== "completed" &&
-    status !== "failed" &&
-    status !== "cancelled" &&
-    status !== "interrupted"
-  );
+  return isActiveSubagentStatus(group.workflow.status);
 }
 
 function workflowMembers(group: AgentPanelWorkflowGroup): ReadonlyArray<RuntimeSubagent> {
@@ -521,6 +517,60 @@ function WorkflowSection({
   );
 }
 
+/**
+ * Settled workflows and direct spawns, pinned above the footer and collapsed
+ * by default so finished work leaves the live list without disappearing.
+ */
+function CompletedSection({
+  workflows,
+  agents,
+  environmentId,
+  threadId,
+}: {
+  workflows: ReadonlyArray<AgentPanelWorkflowGroup>;
+  agents: ReadonlyArray<RuntimeSubagent>;
+  environmentId: EnvironmentId | null;
+  threadId: ThreadId | null;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border-t border-border/60">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-3xs font-medium uppercase tracking-wider text-muted-foreground hover:bg-accent/40"
+      >
+        {open ? (
+          <ChevronDown aria-hidden className="size-3 shrink-0" />
+        ) : (
+          <ChevronRight aria-hidden className="size-3 shrink-0" />
+        )}
+        <span>Completed</span>
+        <span className="font-mono font-normal normal-case text-muted-foreground/70">
+          {workflows.length + agents.length}
+        </span>
+      </button>
+      {/* Hidden rather than unmounted so expanded runs keep their state across toggles. */}
+      <ScrollArea className={cn("max-h-80", !open && "hidden")}>
+        <div className="flex flex-col gap-2 px-2 pb-2">
+          {workflows.map((group) => (
+            <WorkflowSection
+              key={group.workflow.id}
+              group={group}
+              environmentId={environmentId}
+              threadId={threadId}
+            />
+          ))}
+          {agents.map((agent) => (
+            <AgentRow key={agent.id} agent={agent} />
+          ))}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
+
 export function AgentsPanel({
   model,
   environmentId = null,
@@ -543,11 +593,18 @@ export function AgentsPanel({
     );
   }
 
+  const activeWorkflows = model.workflows.filter((group) => workflowIsLive(group));
+  const completedWorkflows = model.workflows.filter((group) => !workflowIsLive(group));
+  const activeAgents = model.directAgents.filter((agent) => isActiveSubagentStatus(agent.status));
+  const completedAgents = model.directAgents.filter(
+    (agent) => !isActiveSubagentStatus(agent.status),
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-2 p-2">
-          {model.workflows.map((group) => (
+          {activeWorkflows.map((group) => (
             <WorkflowSection
               key={group.workflow.id}
               group={group}
@@ -555,18 +612,31 @@ export function AgentsPanel({
               threadId={threadId}
             />
           ))}
-          {model.directAgents.length > 0 ? (
+          {activeAgents.length > 0 ? (
             <section>
               <div className="px-1.5 pt-1 text-3xs font-medium uppercase tracking-wider text-muted-foreground">
                 Direct spawns
               </div>
-              {model.directAgents.map((agent) => (
+              {activeAgents.map((agent) => (
                 <AgentRow key={agent.id} agent={agent} />
               ))}
             </section>
           ) : null}
+          {activeWorkflows.length === 0 && activeAgents.length === 0 ? (
+            <p className="px-1.5 py-4 text-center text-xs text-muted-foreground">
+              No agents running.
+            </p>
+          ) : null}
         </div>
       </ScrollArea>
+      {completedWorkflows.length + completedAgents.length > 0 ? (
+        <CompletedSection
+          workflows={completedWorkflows}
+          agents={completedAgents}
+          environmentId={environmentId}
+          threadId={threadId}
+        />
+      ) : null}
       <footer className="flex items-center justify-between border-t border-border/60 px-3 py-1.5 font-mono text-2xs text-muted-foreground">
         <span className="flex items-center gap-2">
           {model.runningCount + model.waitingCount > 0 ? (
