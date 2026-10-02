@@ -1,0 +1,165 @@
+name: Fork release
+
+# Personal fork only: merges pingdotgg/t3code into main, then builds an unsigned
+# Apple Silicon app and publishes it as a release here. `scripts/fork-update.sh`
+# installs the latest one. The version carries `-preview.` so the app ships
+# without an update feed: an unsigned macOS app cannot install in-app updates.
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: Build even if main has not changed since the last release
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Merge upstream
+    if: github.repository == 'mrkizildag/t3code'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.merge.outputs.sha }}
+    steps:
+      # A PAT is required: GITHUB_TOKEN may not push commits that touch
+      # .github/workflows, and upstream changes those often.
+      - name: Require sync token
+        env:
+          FORK_SYNC_TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
+        run: |
+          if [ -z "$FORK_SYNC_TOKEN" ]; then
+            echo "::error::Set the FORK_SYNC_TOKEN secret (fine-grained PAT: Contents, Workflows, Pull requests read/write on this repo)."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.FORK_SYNC_TOKEN }}
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Merge upstream main
+        id: merge
+        env:
+          GH_TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/pingdotgg/t3code.git
+          git fetch --no-tags upstream main
+
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "Already up to date with upstream."
+          elif git merge --no-edit -m "chore: sync upstream ($(date -u +%F))" upstream/main; then
+            git push origin HEAD:main
+          else
+            git merge --abort
+            branch="sync-upstream-$(date -u +%Y%m%d)"
+            if [ -n "$(gh pr list --state open --search 'head:sync-upstream-' --json number --jq '.[].number')" ]; then
+              echo "::warning::Upstream conflicts with main; a sync PR is already open."
+            else
+              git push --force origin "upstream/main:refs/heads/$branch"
+              gh pr create --base main --head "$branch" \
+                --title "chore: sync upstream ($(date -u +%F))" \
+                --body "Upstream conflicts with this fork's changes. Resolve the conflicts and merge; the next nightly run builds the result."
+              echo "::warning::Upstream conflicts with main; opened a sync PR."
+            fi
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build macOS arm64
+    needs: sync
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Skip if already released
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.sync.outputs.sha }}
+          FORCE: ${{ inputs.force_build || false }}
+        run: |
+          set -euo pipefail
+          last="$(gh release view -R "$GITHUB_REPOSITORY" --json targetCommitish --jq .targetCommitish 2>/dev/null || true)"
+          if [ "$FORCE" != "true" ] && [ "$last" = "$SHA" ]; then
+            echo "Latest release already built from $SHA."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.sync.outputs.sha }}
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        if: steps.check.outputs.skip != 'true'
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: false
+
+      - name: Setup Rust
+        if: steps.check.outputs.skip != 'true'
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin
+
+      - name: Install dependencies
+        if: steps.check.outputs.skip != 'true'
+        run: vp install
+
+      - name: Resolve version
+        if: steps.check.outputs.skip != 'true'
+        id: version
+        run: |
+          base="$(node -p 'require("./apps/desktop/package.json").version')"
+          version="${base}-preview.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          node scripts/update-release-package-versions.ts "$version"
+
+      - name: Build DMG
+        if: steps.check.outputs.skip != 'true'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          T3CODE_DESKTOP_VERSION: ${{ steps.version.outputs.version }}
+        run: vp run dist:desktop:dmg
+
+      - name: Publish release
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA: ${{ needs.sync.outputs.sha }}
+        run: |
+          set -euo pipefail
+          gh release create "fork-$VERSION" \
+            --target "$SHA" \
+            --title "T3 Code $VERSION (fork)" \
+            --notes "Unsigned fork build of $SHA. Install with \`scripts/fork-update.sh\`." \
+            --latest \
+            release/*.dmg release/*.zip
