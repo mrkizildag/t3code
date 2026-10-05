@@ -82,8 +82,8 @@ export function buildThreadActionMenuItems(
     ...(state.supports.pinning
       ? [
           state.isPinned
-            ? { id: "unpin" as const, label: "Unpin thread", icon: "pin-off" }
-            : { id: "pin" as const, label: "Pin thread", icon: "pin" },
+            ? { id: "unpin" as const, label: "Unpin thread", icon: "pin-off", shortcut: "P" }
+            : { id: "pin" as const, label: "Pin thread", icon: "pin", shortcut: "P" },
         ]
       : []),
     // Both lifecycle actions stay available on pinned threads: settling
@@ -92,18 +92,29 @@ export function buildThreadActionMenuItems(
     ...(state.supports.settlement
       ? [
           state.isSettled
-            ? { id: "unsettle" as const, label: "Un-settle thread", icon: "circle-check" }
-            : { id: "settle" as const, label: "Settle thread", icon: "circle-check" },
+            ? {
+                id: "unsettle" as const,
+                label: "Un-settle thread",
+                icon: "circle-check",
+                shortcut: "S",
+              }
+            : {
+                id: "settle" as const,
+                label: "Settle thread",
+                icon: "circle-check",
+                shortcut: "S",
+              },
         ]
       : []),
     ...(state.supports.snooze
       ? [
           state.isSnoozed
-            ? { id: "unsnooze" as const, label: "Wake thread", icon: "clock" }
+            ? { id: "unsnooze" as const, label: "Wake thread", icon: "clock", shortcut: "Z" }
             : {
                 id: "snooze" as const,
                 label: "Snooze",
                 icon: "clock",
+                shortcut: "Z",
                 disabled: !state.canSnoozeNow,
                 children: [
                   ...state.snoozePresets.map((preset) => ({
@@ -115,7 +126,13 @@ export function buildThreadActionMenuItems(
               },
         ]
       : []),
-    { id: "rename", label: "Rename thread", icon: "pencil", separatorBefore: true },
+    {
+      id: "rename",
+      label: "Rename thread",
+      icon: "pencil",
+      separatorBefore: true,
+      shortcut: "R",
+    },
     ...(state.supports.titleRegeneration
       ? [
           {
@@ -126,7 +143,7 @@ export function buildThreadActionMenuItems(
           },
         ]
       : []),
-    { id: "mark-unread", label: "Mark unread", icon: "mail-open" },
+    { id: "mark-unread", label: "Mark unread", icon: "mail-open", shortcut: "U" },
     ...(state.projectFilter
       ? [
           {
@@ -188,12 +205,14 @@ export function buildThreadActionMenuItems(
       icon: "archive",
       disabled: state.isRunning,
       separatorBefore: true,
+      shortcut: "A",
     },
     {
       id: "delete",
       label: "Delete",
       destructive: true,
       icon: "trash",
+      shortcut: "D",
     },
   ];
 }

@@ -42,40 +42,18 @@ export interface ContextMenuItem<T extends string = string> {
   separatorBefore?: boolean;
   /** Shows a check mark. Used to mark the current option inside a submenu. */
   checked?: boolean;
+  /**
+   * One-letter keyboard shortcut shown right-aligned while the menu is open.
+   * Explicit values win over auto-assignment; see `assignMenuShortcuts` in
+   * `apps/web/src/contextMenu.ts`.
+   */
+  shortcut?: string;
   children?: readonly ContextMenuItem<T>[];
 }
 
 export type QuitShortcutHintEvent =
   | { readonly state: "down"; readonly mode: Exclude<QuitConfirmationMode, "direct"> }
   | { readonly state: "up" };
-
-export interface ContextMenuItemSchemaType {
-  readonly id: string;
-  readonly label: string;
-  readonly destructive?: boolean;
-  readonly disabled?: boolean;
-  readonly header?: boolean;
-  readonly icon?: string;
-  readonly separatorBefore?: boolean;
-  readonly checked?: boolean;
-  readonly children?: readonly ContextMenuItemSchemaType[];
-}
-
-export const ContextMenuItemSchema: Schema.Codec<ContextMenuItemSchemaType> = Schema.Struct({
-  id: Schema.String,
-  label: Schema.String,
-  destructive: Schema.optionalKey(Schema.Boolean),
-  disabled: Schema.optionalKey(Schema.Boolean),
-  header: Schema.optionalKey(Schema.Boolean),
-  icon: Schema.optionalKey(Schema.String),
-  separatorBefore: Schema.optionalKey(Schema.Boolean),
-  checked: Schema.optionalKey(Schema.Boolean),
-  children: Schema.optionalKey(
-    Schema.Array(
-      Schema.suspend((): Schema.Codec<ContextMenuItemSchemaType> => ContextMenuItemSchema),
-    ),
-  ),
-});
 
 export type DesktopUpdateStatus =
   | "disabled"
@@ -1208,10 +1186,6 @@ export interface DesktopBridge {
    */
   pickThemeFiles?: () => Promise<readonly PickedThemeFile[] | null>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
-  showContextMenu: <T extends string>(
-    items: readonly ContextMenuItem<T>[],
-    position?: { x: number; y: number },
-  ) => Promise<T | null>;
   /** Receives a local OAuth code for a sign-in owned by a remote environment. */
   receiveProviderAuthCallback?: (authorizationUrl: string) => Promise<string>;
   cancelProviderAuthCallback?: (authorizationUrl: string) => Promise<void>;
@@ -1231,6 +1205,15 @@ export interface DesktopBridge {
   /** Present when the desktop shell can perform an ordered plain-text paste. */
   pasteAsText?: () => Promise<void>;
   onMenuAction: (listener: (action: string) => void) => () => void;
+  /**
+   * Styled context-menu requests forwarded from a native right-click inside
+   * the app itself or a Browser panel guest. Optional: older desktop builds
+   * still pop Electron's native edit menu instead.
+   */
+  onNativeContextMenu?: (
+    listener: (request: DesktopNativeContextMenuRequest) => void,
+  ) => () => void;
+  runNativeContextMenuAction?: (input: DesktopRunNativeContextMenuActionInput) => Promise<void>;
   onSnapShotEvent?: (listener: (event: DesktopSnapShotEvent) => void) => () => void;
   /**
    * Quit-confirmation hint pushes. Optional: older desktop builds never emit
@@ -1349,6 +1332,39 @@ export interface DesktopPreviewBridge {
   };
   onStateChange: (listener: (tabId: string, state: DesktopPreviewTabState) => void) => () => void;
   onPointerEvent: (listener: (event: DesktopPreviewPointerEvent) => void) => () => void;
+}
+
+/** One actionable row of a styled context-menu request forwarded from main. */
+export interface DesktopNativeContextMenuItem {
+  id: string;
+  label: string;
+  disabled?: boolean;
+  separatorBefore?: boolean;
+}
+
+/**
+ * Where a native right-click originated: the app's own renderer, or a
+ * Browser panel `<webview>` guest identified by its Electron webContents id.
+ */
+export type DesktopNativeContextMenuSource =
+  | { readonly kind: "app" }
+  | { readonly kind: "browser"; readonly webContentsId: number };
+
+export interface DesktopNativeContextMenuRequest {
+  requestId: number;
+  source: DesktopNativeContextMenuSource;
+  x: number;
+  y: number;
+  items: readonly DesktopNativeContextMenuItem[];
+}
+
+export const DesktopRunNativeContextMenuActionInputSchema = Schema.Struct({
+  requestId: Schema.Number,
+  actionId: Schema.NullOr(Schema.String),
+});
+export interface DesktopRunNativeContextMenuActionInput {
+  requestId: number;
+  actionId: string | null;
 }
 
 export type ConfirmDialogVariant = "default" | "destructive";

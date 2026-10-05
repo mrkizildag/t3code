@@ -252,7 +252,7 @@ function MenuShortcut({ className, ...props }: React.ComponentProps<"kbd">) {
   return (
     <kbd
       className={cn(
-        "ms-auto font-medium font-sans text-secondary-label text-xs tracking-widest",
+        "ms-auto font-medium font-sans text-secondary-label text-xs tracking-widest in-data-[slot=menu-sub-trigger]:ms-0",
         className,
       )}
       data-slot="menu-shortcut"
@@ -270,10 +270,13 @@ function MenuSubTrigger({
   inset,
   density = "default",
   children,
+  shortcut,
   ...props
 }: MenuPrimitive.SubmenuTrigger.Props & {
   inset?: boolean;
   density?: "default" | "touch";
+  /** Rendered after the chevron so shortcuts line up with other items' trailing shortcuts. */
+  shortcut?: React.ReactNode;
 }) {
   return (
     <MenuPrimitive.SubmenuTrigger
@@ -293,7 +296,14 @@ function MenuSubTrigger({
       {...props}
     >
       {children}
-      <ChevronRightIcon className="-me-0.5 ms-auto opacity-80" />
+      {shortcut ? (
+        <span className="ms-auto flex items-center gap-2">
+          <ChevronRightIcon className="-me-0.5 opacity-80" />
+          {shortcut}
+        </span>
+      ) : (
+        <ChevronRightIcon className="-me-0.5 ms-auto opacity-80" />
+      )}
     </MenuPrimitive.SubmenuTrigger>
   );
 }

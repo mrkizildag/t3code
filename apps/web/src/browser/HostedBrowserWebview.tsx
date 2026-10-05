@@ -9,6 +9,7 @@ import { usePreviewBridge } from "~/components/preview/usePreviewBridge";
 import { useClientSettingsHydrated } from "~/hooks/useSettings";
 import { cn, isMacPlatform } from "~/lib/utils";
 
+import { registerBrowserWebviewElement } from "./browserWebviewRegistry";
 import { resolveBrowserSurfacePanelRect, useBrowserSurfaceStore } from "./browserSurfaceStore";
 import { useActiveBrowserRecordingTabIds } from "./browserRecording";
 import {
@@ -73,6 +74,7 @@ export function HostedBrowserWebview(props: {
   const tabLeaseRef = useRef<AcquiredDesktopTab | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const webviewRef = useRef<ElectronWebview | null>(null);
+  const unregisterWebviewElementRef = useRef<(() => void) | null>(null);
   const crashRecoveryRef = useRef<WebviewCrashRecoveryState>(INITIAL_WEBVIEW_CRASH_RECOVERY_STATE);
   const [aspectRatioLocked, setAspectRatioLocked] = useState(false);
   const presentation = useBrowserSurfaceStore(
@@ -137,6 +139,12 @@ export function HostedBrowserWebview(props: {
           const webContentsId = webview.getWebContentsId();
           if (Number.isInteger(webContentsId) && webContentsId > 0) {
             await bridge.registerWebview(runtimeTabId, webContentsId);
+            if (disposed || webviewRef.current !== webview) return;
+            unregisterWebviewElementRef.current?.();
+            unregisterWebviewElementRef.current = registerBrowserWebviewElement(
+              webContentsId,
+              webview,
+            );
           }
         } catch {
           // did-attach/dom-ready will retry if the guest was not ready yet.
@@ -176,6 +184,8 @@ export function HostedBrowserWebview(props: {
       webview.removeEventListener("dom-ready", register);
       webview.removeEventListener("render-process-gone", recoverGuest);
       webview.removeEventListener("focus", dismissHostPopups);
+      unregisterWebviewElementRef.current?.();
+      unregisterWebviewElementRef.current = null;
     };
   }, [clientSettingsHydrated, config, initialSrc, runtimeTabId, webviewGeneration]);
 
