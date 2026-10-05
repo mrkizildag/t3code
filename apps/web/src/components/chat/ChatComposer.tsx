@@ -5121,10 +5121,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     ? standaloneComposerImages.filter((image) => pendingSnapShotIdSet.has(image.id))
     : standaloneComposerImages;
   // Keep collapsed controls inside the input when workspace context is hidden.
-  const composerControlsCollapsed =
-    restingControlsHost !== null || isComposerResting || isComposerCollapsedMobile;
+  const composerControlsCollapsed = isComposerResting || isComposerCollapsedMobile;
   const showInlineRestingControls = composerControlsCollapsed && restingControlsHost === null;
-  const composerControlsInStrip = composerControlsCollapsed && restingControlsHost !== null;
   const composerControlsVisibleInStrip =
     composerControlsCollapsed && restingControlsHost !== null && restingControlsVisible;
   const composerControlsHidden = composerControlsCollapsed && !restingControlsVisible;
@@ -5348,9 +5346,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             id: "traits",
             content: (
               <>
-                {composerControlsInStrip ? null : (
-                  <ComposerControlSeparator size={composerControlsCollapsed ? "xs" : "sm"} />
-                )}
+                <ComposerControlSeparator size={composerControlsCollapsed ? "xs" : "sm"} />
                 {restingProviderTraitsPicker}
               </>
             ),
@@ -5393,7 +5389,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     </ComposerControl>
   ) : (
     <>
-      {composerControlsInStrip ? <div aria-hidden className="flex-1" /> : null}
       {composerControlsCollapsed &&
       restingControlsHost !== null &&
       restingControlsHaveLeadingContext ? (
@@ -6599,7 +6594,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               aria-hidden={restingControlsVisible ? undefined : true}
               inert={restingControlsVisible ? undefined : true}
               className={cn(
-                "relative flex w-full min-w-0 items-center gap-1 font-normal text-muted-foreground/70 [&_button]:text-xs!",
+                "relative flex w-max min-w-0 max-w-full items-center gap-1 font-normal text-muted-foreground/70 [&_button]:text-xs!",
                 !restingControlsVisible && "invisible",
               )}
             >
@@ -6870,7 +6865,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 isComposerApprovalState && "pb-3 sm:pb-4",
                 isComposerCollapsedMobile && "hidden",
                 isComposerResting && "py-2 sm:py-2",
-                composerControlsInStrip && "py-2.5 sm:py-2.5",
               )}
             >
               {isStashMenuOpen && !composerMenuOpen && !isComposerApprovalState && (
@@ -7281,7 +7275,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 className={cn(
                   "relative",
                   isComposerResting && "flex min-w-0 items-center gap-1",
-                  composerControlsCollapsed &&
+                  isComposerResting &&
                     ((settings.contextWindowMeterEnabled && activeContextWindow) ||
                     reserveContextWindowMeter
                       ? "pr-28"
@@ -7358,7 +7352,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       showMobilePendingAnswerActions && "max-sm:pb-12",
                       isComposerResting &&
                         "my-0 max-h-8 min-h-8 overflow-hidden py-0 whitespace-pre! leading-8",
-                      composerControlsInStrip && !isComposerResting && "min-h-8",
                       isComposerApprovalState && "min-h-10",
                     )}
                     placeholderClassName={cn(
@@ -7446,11 +7439,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   pendingUserInputs.length > 0 && "pt-2",
                   isComposerFooterCompact ? "gap-1.5" : "gap-2 sm:gap-0",
                   showMobilePendingAnswerActions && "hidden sm:flex",
-                  composerControlsInStrip &&
-                    "absolute inset-y-px right-px z-10 h-auto w-auto items-end gap-0 px-2 py-0 pb-2 sm:gap-0 sm:px-2 sm:py-0 sm:pb-2",
                   isComposerResting &&
-                    showInlineRestingControls &&
-                    "absolute right-px bottom-[calc(2rem+1px)] z-10 h-12 w-auto gap-0 py-0 sm:gap-0 sm:py-0",
+                    "absolute right-px z-10 h-12 w-auto gap-0 py-0 sm:gap-0 sm:py-0",
+                  isComposerResting &&
+                    (showInlineRestingControls ? "bottom-[calc(2rem+1px)]" : "bottom-px"),
                 )}
               >
                 <div
@@ -7459,7 +7451,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   data-chat-composer-footer-controls="true"
                   className={cn(
                     "relative -m-1 -ms-3.5 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 ps-3.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-                    composerControlsCollapsed && "hidden",
+                    isComposerResting && "hidden",
                   )}
                 >
                   {composerControlsCollapsed ? null : composerControls}
