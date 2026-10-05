@@ -3,6 +3,12 @@
 Customize shortcuts in **Settings → Keybindings** on web and desktop. That page
 also lists the command IDs and defaults available in your version.
 
+## Right-click menus
+
+On web and desktop, each item in a right-click menu shows a letter. Press it to
+choose the item or open its submenu; arrow keys and Enter also work. These
+letters are fixed and are not configured here.
+
 ## Composer controls
 
 In **Settings → General → Send shortcut**, choose whether Enter sends, requires

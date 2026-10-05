@@ -170,6 +170,29 @@ describe("buildThreadActionMenuItems", () => {
     );
     expect(archiveItem?.disabled).toBe(true);
   });
+
+  it("assigns the fixed thread-action letters", () => {
+    const items = buildThreadActionMenuItems({
+      ...baseState,
+      isPinned: true,
+      isSettled: true,
+      isSnoozed: true,
+    });
+    const shortcutFor = (id: string) => items.find((item) => item.id === id)?.shortcut;
+    expect(shortcutFor("unpin")).toBe("P");
+    expect(shortcutFor("unsettle")).toBe("S");
+    expect(shortcutFor("unsnooze")).toBe("Z");
+    expect(shortcutFor("rename")).toBe("R");
+    expect(shortcutFor("mark-unread")).toBe("U");
+    expect(shortcutFor("archive")).toBe("A");
+    expect(shortcutFor("delete")).toBe("D");
+
+    const active = buildThreadActionMenuItems(baseState);
+    const activeShortcutFor = (id: string) => active.find((item) => item.id === id)?.shortcut;
+    expect(activeShortcutFor("pin")).toBe("P");
+    expect(activeShortcutFor("settle")).toBe("S");
+    expect(activeShortcutFor("snooze")).toBe("Z");
+  });
 });
 
 describe("buildDraftActionMenuItems", () => {

@@ -8,7 +8,12 @@ import * as Ref from "effect/Ref";
 
 import * as Electron from "electron";
 
-import { type DesktopSnapShotEvent, DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts";
+import {
+  type DesktopNativeContextMenuRequest,
+  type DesktopNativeContextMenuSource,
+  type DesktopSnapShotEvent,
+  DEFAULT_CLIENT_SETTINGS,
+} from "@t3tools/contracts";
 
 import * as DesktopAssets from "../app/DesktopAssets.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
@@ -20,11 +25,13 @@ import * as ElectronTheme from "../electron/ElectronTheme.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import {
   MENU_ACTION_CHANNEL,
+  NATIVE_CONTEXT_MENU_REQUEST_CHANNEL,
   QUIT_SHORTCUT_CHANNEL,
   SNAP_SHOT_EVENT_CHANNEL,
   TRACKPAD_SCROLL_END_CHANNEL,
   WINDOW_FULLSCREEN_STATE_CHANNEL,
 } from "../ipc/channels.ts";
+import { registerNativeContextMenuRequest } from "../ipc/methods/nativeContextMenu.ts";
 import * as PreviewManager from "../preview/Manager.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopClientSettings from "../settings/DesktopClientSettings.ts";
@@ -91,6 +98,16 @@ export type DesktopWindowError =
   | PreviewManager.PreviewManagerError;
 
 export type MainWindowZoomDirection = "in" | "out" | "reset";
+
+/** One applicable context-menu action, shared between the native and styled builders. */
+interface ContextMenuActionEntry {
+  readonly id: string;
+  readonly label: string;
+  readonly enabled: boolean;
+  readonly run: () => void;
+}
+
+type StyledContextMenuItem = DesktopNativeContextMenuRequest["items"][number];
 
 export class DesktopWindow extends Context.Service<
   DesktopWindow,
@@ -526,65 +543,185 @@ export const make = Effect.gen(function* () {
     });
 
     const contextMenuContents = new WeakSet<Electron.WebContents>();
+    // One entry per applicable action; grouped so a separator can be inserted
+    // between non-empty groups without a trailing one to trim.
+    const collectContextMenuGroups = (
+      contents: Electron.WebContents,
+      params: Electron.ContextMenuParams,
+    ): readonly (readonly ContextMenuActionEntry[])[] => {
+      const groups: ContextMenuActionEntry[][] = [];
+
+      if (params.misspelledWord) {
+        const suggestions = params.dictionarySuggestions
+          .slice(0, 5)
+          .map((suggestion, index): ContextMenuActionEntry => ({
+            id: `suggestion:${index}`,
+            label: suggestion,
+            enabled: true,
+            run: () => {
+              if (!contents.isDestroyed()) contents.replaceMisspelling(suggestion);
+            },
+          }));
+        groups.push(
+          suggestions.length > 0
+            ? suggestions
+            : [{ id: "no-suggestions", label: "No suggestions", enabled: false, run: () => {} }],
+        );
+      }
+
+      if (Option.isSome(ElectronShell.parseSafeExternalUrl(params.linkURL))) {
+        groups.push([
+          {
+            id: "copy-link",
+            label: "Copy Link",
+            enabled: true,
+            run: () => {
+              void runPromise(electronShell.copyText(params.linkURL));
+            },
+          },
+        ]);
+      }
+
+      if (params.mediaType === "image") {
+        groups.push([
+          {
+            id: "copy-image",
+            label: "Copy Image",
+            enabled: true,
+            run: () => {
+              if (!contents.isDestroyed()) contents.copyImageAt(params.x, params.y);
+            },
+          },
+        ]);
+      }
+
+      if (params.isEditable) {
+        groups.push([
+          { id: "cut", label: "Cut", enabled: params.editFlags.canCut, run: () => contents.cut() },
+          {
+            id: "copy",
+            label: "Copy",
+            enabled: params.editFlags.canCopy,
+            run: () => contents.copy(),
+          },
+          {
+            id: "paste",
+            label: "Paste",
+            enabled: params.editFlags.canPaste,
+            run: () => contents.paste(),
+          },
+          {
+            id: "select-all",
+            label: "Select All",
+            enabled: params.editFlags.canSelectAll,
+            run: () => contents.selectAll(),
+          },
+        ]);
+      } else if (params.selectionText.length > 0) {
+        groups.push([
+          {
+            id: "copy",
+            label: "Copy",
+            enabled: params.editFlags.canCopy,
+            run: () => contents.copy(),
+          },
+        ]);
+      }
+
+      return groups;
+    };
+
+    const NATIVE_ROLE_BY_ID: Readonly<
+      Record<string, Exclude<Electron.MenuItemConstructorOptions["role"], undefined>>
+    > = {
+      cut: "cut",
+      copy: "copy",
+      paste: "paste",
+      "select-all": "selectAll",
+    };
+
+    // Popups (sign-in and other windows a guest opens) keep the native
+    // Electron menu, where cut/copy/paste/selectAll use roles rather than our
+    // own `run` so Electron's built-in keyboard/OS integration still applies.
+    const buildNativeContextMenuTemplate = (
+      groups: readonly (readonly ContextMenuActionEntry[])[],
+    ): Electron.MenuItemConstructorOptions[] => {
+      const template: Electron.MenuItemConstructorOptions[] = [];
+      groups.forEach((group, groupIndex) => {
+        if (groupIndex > 0) template.push({ type: "separator" });
+        for (const entry of group) {
+          const role = NATIVE_ROLE_BY_ID[entry.id];
+          if (role) {
+            template.push({ role, enabled: entry.enabled });
+          } else if (entry.enabled) {
+            template.push({ label: entry.label, click: entry.run });
+          } else {
+            template.push({ label: entry.label, enabled: false });
+          }
+        }
+      });
+      while (template.at(-1)?.type === "separator") template.pop();
+      return template;
+    };
+
+    const buildStyledContextMenuItems = (
+      groups: readonly (readonly ContextMenuActionEntry[])[],
+    ): {
+      readonly items: readonly StyledContextMenuItem[];
+      readonly actions: ReadonlyMap<string, () => void>;
+    } => {
+      const items: StyledContextMenuItem[] = [];
+      const actions = new Map<string, () => void>();
+      groups.forEach((group, groupIndex) => {
+        group.forEach((entry, entryIndex) => {
+          items.push({
+            id: entry.id,
+            label: entry.label,
+            ...(entry.enabled ? {} : { disabled: true }),
+            ...(groupIndex > 0 && entryIndex === 0 ? { separatorBefore: true } : {}),
+          });
+          actions.set(entry.id, entry.run);
+        });
+      });
+      return { items, actions };
+    };
+
     const installContextMenu = (
       ownerWindow: Electron.BrowserWindow,
       contents: Electron.WebContents,
+      options: { readonly styled: boolean },
     ): void => {
       if (contextMenuContents.has(contents)) return;
       contextMenuContents.add(contents);
       contents.on("context-menu", (event, params) => {
         event.preventDefault();
         if (contents.isDestroyed() || ownerWindow.isDestroyed()) return;
-        // Native editing roles act on the focused contents, which may still be
-        // the host renderer when the user right-clicks inside a browser guest.
+        const groups = collectContextMenuGroups(contents, params);
+
+        if (options.styled) {
+          const { items, actions } = buildStyledContextMenuItems(groups);
+          if (items.length === 0) return;
+          const requestId = registerNativeContextMenuRequest({ contents, actions });
+          const source: DesktopNativeContextMenuSource =
+            contents === ownerWindow.webContents
+              ? { kind: "app" }
+              : { kind: "browser", webContentsId: contents.id };
+          const request: DesktopNativeContextMenuRequest = {
+            requestId,
+            source,
+            // Electron reports DIPs; the renderer positions in the contents' CSS px.
+            x: params.x / contents.getZoomFactor(),
+            y: params.y / contents.getZoomFactor(),
+            items,
+          };
+          ownerWindow.webContents.send(NATIVE_CONTEXT_MENU_REQUEST_CHANNEL, request);
+          return;
+        }
+
+        const menuTemplate = buildNativeContextMenuTemplate(groups);
+        if (menuTemplate.length === 0) return;
+        // Native editing roles act on the focused contents.
         contents.focus();
-
-        const menuTemplate: Electron.MenuItemConstructorOptions[] = [];
-
-        if (params.misspelledWord) {
-          for (const suggestion of params.dictionarySuggestions.slice(0, 5)) {
-            menuTemplate.push({
-              label: suggestion,
-              click: () => {
-                if (!contents.isDestroyed()) contents.replaceMisspelling(suggestion);
-              },
-            });
-          }
-          if (params.dictionarySuggestions.length === 0) {
-            menuTemplate.push({ label: "No suggestions", enabled: false });
-          }
-          menuTemplate.push({ type: "separator" });
-        }
-
-        if (Option.isSome(ElectronShell.parseSafeExternalUrl(params.linkURL))) {
-          menuTemplate.push(
-            {
-              label: "Copy Link",
-              click: () => {
-                void runPromise(electronShell.copyText(params.linkURL));
-              },
-            },
-            { type: "separator" },
-          );
-        }
-
-        if (params.mediaType === "image") {
-          menuTemplate.push({
-            label: "Copy Image",
-            click: () => {
-              if (!contents.isDestroyed()) contents.copyImageAt(params.x, params.y);
-            },
-          });
-          menuTemplate.push({ type: "separator" });
-        }
-
-        menuTemplate.push(
-          { role: "cut", enabled: params.editFlags.canCut },
-          { role: "copy", enabled: params.editFlags.canCopy },
-          { role: "paste", enabled: params.editFlags.canPaste },
-          { role: "selectAll", enabled: params.editFlags.canSelectAll },
-        );
-
         void runPromise(
           electronMenu.popupTemplate({
             window: ownerWindow,
@@ -594,12 +731,12 @@ export const make = Effect.gen(function* () {
         );
       });
       contents.on("did-create-window", (popup) => {
-        installContextMenu(popup, popup.webContents);
+        installContextMenu(popup, popup.webContents, { styled: false });
       });
     };
-    installContextMenu(window, window.webContents);
+    installContextMenu(window, window.webContents, { styled: true });
     window.webContents.on("did-attach-webview", (_event, contents) => {
-      installContextMenu(window, contents);
+      installContextMenu(window, contents, { styled: true });
       void runPromise(previewManager.prepareWebview(contents));
     });
 

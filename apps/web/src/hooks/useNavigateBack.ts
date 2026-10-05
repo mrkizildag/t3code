@@ -1,5 +1,6 @@
 import { useCanGoBack, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect } from "react";
+import { isContextMenuOpen } from "../contextMenu";
 
 /** Returns to the previous app page, or home when opened without app history. */
 function useNavigateBack() {
@@ -22,7 +23,13 @@ export function useEscapeToGoBack(onEscape?: () => void) {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.repeat || event.isComposing || event.key !== "Escape")
+      if (
+        event.defaultPrevented ||
+        event.repeat ||
+        event.isComposing ||
+        event.key !== "Escape" ||
+        isContextMenuOpen()
+      )
         return;
       event.preventDefault();
 

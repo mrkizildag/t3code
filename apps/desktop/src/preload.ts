@@ -1,5 +1,6 @@
 import type {
   DesktopBridge,
+  DesktopNativeContextMenuRequest,
   DesktopPreviewPointerEvent,
   DesktopPreviewRecordingInputEvent,
   DesktopPreviewRecordingFrame,
@@ -57,6 +58,19 @@ if (clientPlatform === "darwin") {
   };
   window.addEventListener("DOMContentLoaded", syncWindowControlInset, { once: true });
   window.addEventListener("resize", syncWindowControlInset);
+}
+
+function isNativeContextMenuRequest(value: unknown): value is DesktopNativeContextMenuRequest {
+  if (typeof value !== "object" || value === null) return false;
+  const { requestId, source, x, y, items } = value as Record<string, unknown>;
+  return (
+    typeof requestId === "number" &&
+    typeof x === "number" &&
+    typeof y === "number" &&
+    Array.isArray(items) &&
+    typeof source === "object" &&
+    source !== null
+  );
 }
 
 function unwrapEnsureSshEnvironmentResult(result: unknown) {
@@ -190,11 +204,6 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.invoke(IpcChannels.PICK_PROJECT_FAVICON_CHANNEL, initialPath),
   pickThemeFiles: () => ipcRenderer.invoke(IpcChannels.PICK_THEME_FILES_CHANNEL, undefined),
   setTheme: (theme) => ipcRenderer.invoke(IpcChannels.SET_THEME_CHANNEL, theme),
-  showContextMenu: (items, position) =>
-    ipcRenderer.invoke(IpcChannels.CONTEXT_MENU_CHANNEL, {
-      items,
-      ...(position === undefined ? {} : { position }),
-    }),
   receiveProviderAuthCallback: (url: string) =>
     ipcRenderer.invoke(IpcChannels.RECEIVE_PROVIDER_AUTH_CALLBACK_CHANNEL, url),
   cancelProviderAuthCallback: (url: string) =>
@@ -217,6 +226,19 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.removeListener(IpcChannels.MENU_ACTION_CHANNEL, wrappedListener);
     };
   },
+  onNativeContextMenu: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, request: unknown) => {
+      if (!isNativeContextMenuRequest(request)) return;
+      listener(request);
+    };
+
+    ipcRenderer.on(IpcChannels.NATIVE_CONTEXT_MENU_REQUEST_CHANNEL, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.NATIVE_CONTEXT_MENU_REQUEST_CHANNEL, wrappedListener);
+    };
+  },
+  runNativeContextMenuAction: (input) =>
+    ipcRenderer.invoke(IpcChannels.RUN_NATIVE_CONTEXT_MENU_ACTION_CHANNEL, input),
   onSnapShotEvent: (listener) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, event: unknown) => {
       if (!isSnapShotEvent(event)) return;

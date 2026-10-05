@@ -2,6 +2,7 @@ import { BookmarkIcon, FileIcon, FileTextIcon } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { assistantCitationsToPlainText } from "@t3tools/shared/assistantCitations";
 
+import { isContextMenuOpen } from "../../contextMenu";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { cn } from "~/lib/utils";
 import { type PromptStashEntry } from "../../promptStashStore";
@@ -66,6 +67,7 @@ export const ComposerStashMenu = memo(function ComposerStashMenu(props: {
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      if (isContextMenuOpen()) return;
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();

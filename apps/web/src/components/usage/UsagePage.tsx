@@ -34,6 +34,7 @@ import { cn } from "../../lib/utils";
 import { environmentPresentations } from "../../state/presentation";
 import { primaryServerKeybindingsAtom, serverEnvironment } from "../../state/server";
 import { isCommandPaletteOpen } from "../../commandPaletteBus";
+import { isContextMenuOpen } from "../../contextMenu";
 import { isModelPickerOpen } from "../../modelPickerVisibility";
 import { shortcutLabelForCommand } from "../../keybindings";
 import { useUsage, type EnvironmentUsageStatus } from "../../state/usage";
@@ -254,7 +255,8 @@ export function UsagePage() {
       event.repeat ||
       event.isComposing ||
       isCommandPaletteOpen() ||
-      isModelPickerOpen()
+      isModelPickerOpen() ||
+      isContextMenuOpen()
     )
       return;
 
