@@ -33,6 +33,7 @@ jobs:
             run: vpr typecheck
           - name: Test web and desktop
             run: vp run --filter @t3tools/web --filter @t3tools/desktop test
+            libsecret: true
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -41,6 +42,11 @@ jobs:
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
+
+      # The desktop browser-secret helper test compiles against libsecret.
+      - name: Install libsecret
+        if: matrix.libsecret
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
 
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@v1
