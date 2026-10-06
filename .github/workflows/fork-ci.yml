@@ -31,8 +31,10 @@ jobs:
             run: vp check
           - name: Typecheck
             run: vpr typecheck
-          - name: Test web and desktop
-            run: vp run --filter @t3tools/web --filter @t3tools/desktop test
+          - name: Test web
+            run: vp run --filter @t3tools/web test
+          - name: Test desktop
+            run: vp run --filter @t3tools/desktop test
             libsecret: true
     steps:
       - name: Checkout
