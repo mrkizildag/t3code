@@ -1,0 +1,56 @@
+name: Fork CI
+
+# Personal fork only. Upstream workflows need Blacksmith runners and are disabled
+# in this repo's Actions settings; this runs the checks fork PRs need on
+# GitHub-hosted runners. A separate file so upstream syncs never conflict.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: ${{ matrix.name }}
+    if: github.repository == 'mrkizildag/t3code'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Lint
+            run: vp check
+          - name: Typecheck
+            run: vpr typecheck
+          - name: Test web and desktop
+            run: vp run --filter @t3tools/web --filter @t3tools/desktop test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      - name: Ensure Electron runtime is installed
+        run: vp run --filter @t3tools/desktop ensure:electron
+
+      - name: ${{ matrix.name }}
+        run: ${{ matrix.run }}
